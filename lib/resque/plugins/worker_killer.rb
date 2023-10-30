@@ -35,6 +35,7 @@ module Resque
 
       class PrivateMethods
         def initialize(obj)
+          @already_logged = false
           @obj = obj
         end
 
@@ -64,11 +65,12 @@ module Resque
         end
 
         def one_shot_monitor_oom(start_time)
+          logger.warn(self)
           rss = GetProcessMem.new.kb
           logger.info "#{plugin_name}: worker (pid: #{Process.pid}) using #{rss} KB." if verbose
-          if rss > mem_limit
+          if rss > mem_limit && !@already_logged
             logger.warn "#{plugin_name}: worker (pid: #{Process.pid}) exceeds memory limit (#{rss} KB > #{mem_limit} KB)"
-            kill_self(logger, start_time)
+            @already_logged = true
           end
         end
 
