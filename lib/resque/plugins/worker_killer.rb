@@ -65,11 +65,10 @@ module Resque
         end
 
         def one_shot_monitor_oom(start_time)
-          logger.warn(self)
           rss = GetProcessMem.new.kb
           logger.info "#{plugin_name}: worker (pid: #{Process.pid}) using #{rss} KB." if verbose
           if rss > mem_limit && !@already_logged
-            logger.warn "#{plugin_name}: worker (pid: #{Process.pid}) exceeds memory limit (#{rss} KB > #{mem_limit} KB)"
+            logger.warn "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} exceeds memory limit (#{rss} KB > #{mem_limit} KB)"
             @already_logged = true
           end
         end
