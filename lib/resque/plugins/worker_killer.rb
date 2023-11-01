@@ -1,3 +1,4 @@
+
 require "resque/plugins/worker_killer/version"
 require 'get_process_mem'
 
@@ -6,6 +7,14 @@ module Resque
     module WorkerKiller
       def worker_killer_monitor_interval
         @worker_killer_monitor_interval ||= 1.0 # sec
+      end
+
+      def worker_killer_agg_monitor_interval
+        @worker_killer_agg_monitor_interval || 10.0 #sec
+      end
+
+      def worker_killer_agg_mem_limit
+        @worker_killer_agg_mem_limit ||= 300 * 1024 * 6 # killo bytes
       end
 
       def worker_killer_mem_limit
@@ -30,17 +39,19 @@ module Resque
           # this is ran in the forked child process
           # we do not let the monitor thread die since the process itself dies
           Thread.start { PrivateMethods.new(klass).monitor_oom }
+          Thread.start { PrivateMethods.new(klass).monitor_oom(true) }
         end
       end
 
       class PrivateMethods
         def initialize(obj)
-          @already_logged = false
           @obj = obj
         end
 
         # delegate attr_reader
         %i[
+          agg_monitor_interval
+          agg_mem_limit
           monitor_interval
           mem_limit
           max_term
@@ -56,21 +67,43 @@ module Resque
           "Resque::Plugins::WorkerKiller"
         end
 
-        def monitor_oom
+        def monitor_oom(aggregated = false)
           start_time = Time.now
-          loop do
-            one_shot_monitor_oom(start_time)
-            sleep monitor_interval
+          if aggregated
+            loop do
+              break if one_shot_agg_monitor_oom(start_time)
+              sleep agg_monitor_interval
+            end
+          else
+            loop do
+              break if one_shot_monitor_oom(start_time)
+              sleep monitor_interval
+            end
           end
+        end
+
+        def one_shot_agg_monitor_oom(start_time)
+          worker_pids = `ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`.split(']')[0..-2].map do |rstr|
+            rstr.split('resque')[0].to_i
+          end
+          agg_rss = worker_pids.sum do |pid|
+            GetProcessMem.new(pid).kb
+          end
+          if agg_rss > agg_mem_limit
+            logger.warn "Aggregated Memory Sum of workers exceeds memory threshold (#{agg_rss} > #{agg_mem_limit}); PIDS: #{worker_pids}"
+            return true
+          end
+          nil
         end
 
         def one_shot_monitor_oom(start_time)
           rss = GetProcessMem.new.kb
           logger.info "#{plugin_name}: worker (pid: #{Process.pid}) using #{rss} KB." if verbose
-          if rss > mem_limit && !@already_logged
-            logger.warn "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} exceeds memory limit (#{rss} KB > #{mem_limit} KB)"
-            @already_logged = true
+          if rss > mem_limit
+            logger.warn "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} exceeds memory threshold (#{rss} KB > #{mem_limit} KB)"
+            return true
           end
+          nil
         end
 
         # Kill the current process by telling it to send signals to itself If
