@@ -35,11 +35,18 @@ module Resque
       end
 
       def self.extended(klass)
-        Resque.after_fork do |job|
-          # this is ran in the forked child process
-          # we do not let the monitor thread die since the process itself dies
-          Thread.start { PrivateMethods.new(klass).monitor_oom }
-          Thread.start { PrivateMethods.new(klass).monitor_oom(true) }
+        unless klass.respond_to?(:after_perform_logging_killer)
+          klass.instance_eval do
+            def after_perform_logging_killer(*args)
+              Thread.current[:memory_checker_threads]&.each(&:kill)
+            end
+
+            def before_perform_logging_killer(*args)
+              Thread.current[:memory_checker_threads] ||= []
+              Thread.current[:memory_checker_threads] << Thread.start { PrivateMethods.new(self).monitor_oom }
+              Thread.current[:memory_checker_threads] << Thread.start { PrivateMethods.new(self).monitor_oom(true) }
+            end
+          end
         end
       end
 
