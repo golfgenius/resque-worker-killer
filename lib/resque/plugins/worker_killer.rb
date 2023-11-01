@@ -37,14 +37,16 @@ module Resque
       def self.extended(klass)
         unless klass.respond_to?(:after_perform_logging_killer)
           klass.instance_eval do
-            def after_perform_logging_killer(*args)
-              Thread.current[:memory_checker_threads]&.each(&:kill)
-            end
+            # in case threads act up
+            # def after_perform_logging_killer(*args)
+            #   Thread.current[:memory_checker_threads]&.each(&:kill)
+            # end
 
             def before_perform_logging_killer(*args)
-              Thread.current[:memory_checker_threads] ||= []
-              Thread.current[:memory_checker_threads] << Thread.start { PrivateMethods.new(self).monitor_oom }
-              Thread.current[:memory_checker_threads] << Thread.start { PrivateMethods.new(self).monitor_oom(true) }
+              # in case threads act up, add the threads to the array and then they'll get killed
+              # Thread.current[:memory_checker_threads] ||= []
+              Thread.start { PrivateMethods.new(self).monitor_oom }
+              Thread.start { PrivateMethods.new(self).monitor_oom(true) }
             end
           end
         end
