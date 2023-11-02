@@ -97,7 +97,7 @@ module Resque
             rstr.split('resque')[0].to_i
           end
           if @log_once
-            logger.warn("WORKER PIDS ARE #{worker_pids}")
+            logger.warn("WORKER PIDS ARE #{`ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`} OR worker_pids = `ps -e -o pid,command | grep -E 'resque' | grep -v grep`")
             @log_once = false
           end
           agg_rss = worker_pids.sum do |pid|
