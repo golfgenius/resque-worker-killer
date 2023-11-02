@@ -98,10 +98,9 @@ module Resque
             rstr.split('resque')[0].to_i
           end
           if @log_once
-            logger.warn("WORKER PIDS ARE #{`ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`}")
-            logger.warn("ps_results ARE #{ps_results}")
-            logger.warn("splitting is #{ps_results.split(']')} AND #{ps_results.split(']')[0..-2]}")
-            logger.warn("worker_pids ARE #{worker_pids}")
+            ps_results.split('resque').each do |x|
+              logger.warn("RESQUE SPLIT -#{x}-")
+            end
             @log_once = false
           end
           agg_rss = worker_pids.sum do |pid|
