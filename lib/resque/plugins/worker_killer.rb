@@ -77,6 +77,7 @@ module Resque
         end
 
         def monitor_oom(aggregated = false)
+          @log_once = true
           start_time = Time.now
           if aggregated
             loop do
@@ -94,6 +95,10 @@ module Resque
         def one_shot_agg_monitor_oom(start_time)
           worker_pids = `ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`.split(']')[0..-2].map do |rstr|
             rstr.split('resque')[0].to_i
+          end
+          if @log_once
+            logger.warn("WORKER PIDS ARE #{worker_pids}")
+            @log_once = false
           end
           agg_rss = worker_pids.sum do |pid|
             GetProcessMem.new(pid).kb
