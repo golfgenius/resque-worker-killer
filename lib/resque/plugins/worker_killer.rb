@@ -93,11 +93,15 @@ module Resque
         end
 
         def one_shot_agg_monitor_oom(start_time)
-          worker_pids = `ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`.split(']')[0..-2].map do |rstr|
+          ps_results = `ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`
+          worker_pids = ps_results.split(']')[0..-2].map do |rstr|
             rstr.split('resque')[0].to_i
           end
           if @log_once
-            logger.warn("WORKER PIDS ARE #{`ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`} OR worker_pids = `ps -e -o pid,command | grep -E 'resque' | grep -v grep`")
+            logger.warn("WORKER PIDS ARE #{`ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`}")
+            logger.warn("ps_results ARE #{ps_results}")
+            logger.warn("splitting is #{ps_results.split(']')} AND #{ps_results.split(']')[0..-2]}")
+            logger.warn("worker_pids ARE #{worker_pids}")
             @log_once = false
           end
           agg_rss = worker_pids.sum do |pid|
