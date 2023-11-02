@@ -77,31 +77,24 @@ module Resque
         end
 
         def monitor_oom(aggregated = false)
-          @log_once = true
           start_time = Time.now
           if aggregated
             loop do
-              break if one_shot_agg_monitor_oom(start_time)
+              break if one_shot_agg_monitor_oom
               sleep agg_monitor_interval
             end
           else
             loop do
-              break if one_shot_monitor_oom(start_time)
+              break if one_shot_monitor_oom
               sleep monitor_interval
             end
           end
         end
 
-        def one_shot_agg_monitor_oom(start_time)
+        def one_shot_agg_monitor_oom
           ps_results = `ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`
-          worker_pids = ps_results.split(']')[0..-2].map do |rstr|
-            rstr.split('resque')[0].to_i
-          end
-          if @log_once
-            ps_results.split('resque').each do |x|
-              logger.warn("RESQUE SPLIT -#{x}-")
-            end
-            @log_once = false
+          worker_pids = ps_results.split('ResqueLibraries::').map do |rstr|
+            rstr.split('resque')[0].scan(/\b\d+\b/).try(:first).to_i
           end
           agg_rss = worker_pids.sum do |pid|
             GetProcessMem.new(pid).kb
@@ -113,7 +106,7 @@ module Resque
           nil
         end
 
-        def one_shot_monitor_oom(start_time)
+        def one_shot_monitor_oom
           rss = GetProcessMem.new.kb
           logger.info "#{plugin_name}: worker (pid: #{Process.pid}) using #{rss} KB." if verbose
           if rss > mem_limit
