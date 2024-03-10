@@ -77,7 +77,6 @@ module Resque
         end
 
         def monitor_oom(aggregated = false)
-          start_time = Time.now
           if aggregated
             loop do
               break if one_shot_agg_monitor_oom
@@ -99,37 +98,27 @@ module Resque
           agg_rss = worker_pids.sum do |pid|
             GetProcessMem.new(pid).kb
           end
-          if agg_rss > agg_mem_limit
-            logger.warn "Aggregated Memory Sum of workers exceeds memory threshold (#{agg_rss} > #{agg_mem_limit}); PIDS: #{worker_pids}"
-            return true
-          end
-          nil
+          memory_over_threshold?(agg_rss, agg_mem_limit, worker_pids)
         end
 
         def one_shot_monitor_oom
           rss = GetProcessMem.new.kb
           logger.info "#{plugin_name}: worker (pid: #{Process.pid}) using #{rss} KB." if verbose
-          if rss > mem_limit
-            logger.warn "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} exceeds memory threshold (#{rss} KB > #{mem_limit} KB)"
-            return true
-          end
-          nil
+          memory_over_threshold?(rss, mem_limit, [])
         end
 
-        # Kill the current process by telling it to send signals to itself If
-        # the process isn't killed after `@max_term` TERM signals,
-        # send a KILL signal.
-        def kill_self(logger, start_time)
-          alive_sec = (Time.now - start_time).round
+        def memory_over_threshold?(rss, mem_limit, worker_pids)
+          return unless rss > mem_limit
 
-          @@kill_attempts ||= 0
-          @@kill_attempts += 1
-
-          sig = :TERM
-          sig = :KILL if @@kill_attempts > max_term
-
-          logger.warn "#{plugin_name}: send SIG#{sig} (pid: #{Process.pid}) alive: #{alive_sec} sec (trial #{@@kill_attempts})"
-          Process.kill(sig, Process.pid)
+          alert_msg =
+            if worker_pids.present?
+              "Aggregated Memory Sum of workers exceeds memory threshold (#{agg_rss} > #{agg_mem_limit}); PIDS: #{worker_pids}"
+            else
+              "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} exceeds memory threshold (#{rss} KB > #{mem_limit} KB)"
+            end
+          callback_for_alert(alert_msg) if defined?(callback_for_alert)
+          logger.warn(alert_msg)
+          true
         end
       end
     end
