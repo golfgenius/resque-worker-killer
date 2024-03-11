@@ -5,22 +5,27 @@ require 'get_process_mem'
 module Resque
   module Plugins
     module WorkerKiller
+      # individual job memory checking interval
       def worker_killer_monitor_interval
         @worker_killer_monitor_interval ||= 1.0 # sec
       end
 
+      # aggregate jobs on pod memory checking interval
       def worker_killer_agg_monitor_interval
         @worker_killer_agg_monitor_interval || 10.0 #sec
       end
 
+      # individual job memory limit
       def worker_killer_agg_mem_limit
         @worker_killer_agg_mem_limit ||= 300 * 1024 * 6 # killo bytes
       end
 
+      # aggregate jobs memory limit
       def worker_killer_mem_limit
         @worker_killer_mem_limit ||= 300 * 1024 # killo bytes
       end
 
+      # kind of redundant
       def worker_killer_max_term
         @worker_killer_max_term ||= (ENV['TERM_CHILD'] ? 10 : 0)
       end
@@ -35,13 +40,16 @@ module Resque
       end
 
       def self.extended(klass)
-        unless klass.respond_to?(:after_perform_logging_killer)
+        unless klass.respond_to?(:before_perform_logging_killer)
           klass.instance_eval do
             # in case threads act up
             # def after_perform_logging_killer(*args)
             #   Thread.current[:memory_checker_threads]&.each(&:kill)
             # end
 
+            # resque is created in such a way that any method prefixed by before_perform gets called before performing the job
+            # this one method creates 2 threads, 1 for each case mentioned above, individual and aggregate, and calls the
+            # callback_error in case the threads fail
             def before_perform_logging_killer(*args)
               # in case threads act up, add the threads to the array and then they'll get killed
               # Thread.current[:memory_checker_threads] ||= []
@@ -88,6 +96,7 @@ module Resque
           "Resque::Plugins::WorkerKiller"
         end
 
+        # infinitely loop in the thread checking the process' memory
         def monitor_oom(aggregated = false)
           if aggregated
             loop do
@@ -102,6 +111,7 @@ module Resque
           end
         end
 
+        # aggregate monitoring, look for all resque jobs processing that are active and get their memory
         def one_shot_agg_monitor_oom
           ps_results = `ps -e -o pid,command | grep -E 'resque.*Processing' | grep -v grep`
           worker_pids = ps_results.split('ResqueLibraries::').map do |rstr|
@@ -113,12 +123,14 @@ module Resque
           memory_over_threshold?(agg_rss, agg_mem_limit, worker_pids)
         end
 
+        # individual monitoring, get the current process' job and see its memory
         def one_shot_monitor_oom
           rss = GetProcessMem.new.kb
           logger.info "#{plugin_name}: worker (pid: #{Process.pid}) using #{rss} KB." if verbose
           memory_over_threshold?(rss, mem_limit, [])
         end
 
+        # in case the memory is over the predefined threshold, send a warning and call the callback_for_alert_method
         def memory_over_threshold?(rss, mem_limit, worker_pids)
           return unless rss > mem_limit
 
