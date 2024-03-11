@@ -45,8 +45,20 @@ module Resque
             def before_perform_logging_killer(*args)
               # in case threads act up, add the threads to the array and then they'll get killed
               # Thread.current[:memory_checker_threads] ||= []
-              Thread.start { PrivateMethods.new(self).monitor_oom }
-              Thread.start { PrivateMethods.new(self).monitor_oom(true) }
+              Thread.start do
+                begin
+                  PrivateMethods.new(self).monitor_oom
+                rescue Exception => e
+                  callback_for_error(e) if respond_to?(:callback_for_error) && method(:callback_for_error).arity == 1
+                end
+              end
+              Thread.start do
+                begin
+                  PrivateMethods.new(self).monitor_oom(true)
+                rescue Exception => e
+                  callback_for_error(e) if respond_to?(:callback_for_error) && method(:callback_for_error).arity == 1
+                end
+              end
             end
           end
         end
@@ -116,7 +128,7 @@ module Resque
             else
               "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} exceeds memory threshold (#{rss} KB > #{mem_limit} KB)"
             end
-          @obj.callback_for_alert(alert_msg) if @obj.respond_to?(:callback_for_alert)
+          @obj.callback_for_alert(alert_msg) if @obj.respond_to?(:callback_for_alert) && @obj.method(:callback_for_alert).arity == 1
           logger.warn(alert_msg)
           true
         end
