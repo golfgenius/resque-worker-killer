@@ -116,7 +116,7 @@ module Resque
             else
               "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} exceeds memory threshold (#{rss} KB > #{mem_limit} KB)"
             end
-          callback_for_alert(alert_msg) if defined?(callback_for_alert)
+          @obj.callback_for_alert(alert_msg) if @obj.respond_to?(:callback_for_alert)
           logger.warn(alert_msg)
           true
         end
