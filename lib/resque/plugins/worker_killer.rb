@@ -55,14 +55,14 @@ module Resque
               # Thread.current[:memory_checker_threads] ||= []
               Thread.start do
                 begin
-                  PrivateMethods.new(self).monitor_oom
+                  PrivateMethods.new(self, args).monitor_oom
                 rescue Exception => e
                   callback_for_error(e) if respond_to?(:callback_for_error) && method(:callback_for_error).arity == 1
                 end
               end
               Thread.start do
                 begin
-                  PrivateMethods.new(self).monitor_oom(true)
+                  PrivateMethods.new(self, args).monitor_oom(true)
                 rescue Exception => e
                   callback_for_error(e) if respond_to?(:callback_for_error) && method(:callback_for_error).arity == 1
                 end
@@ -73,8 +73,9 @@ module Resque
       end
 
       class PrivateMethods
-        def initialize(obj)
+        def initialize(obj, args)
           @obj = obj
+          @args = args
         end
 
         # delegate attr_reader
@@ -136,9 +137,9 @@ module Resque
 
           alert_msg =
             if worker_pids.present?
-              "Aggregated Memory Sum of workers exceeds memory threshold (#{agg_rss} > #{agg_mem_limit}); PIDS: #{worker_pids}"
+              "Aggregated Memory Sum of workers exceeds memory threshold (#{agg_rss} > #{agg_mem_limit}); PIDS: #{worker_pids}\nSource of alert JOB NAME #{@obj} with arguments #{@args}"
             else
-              "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} exceeds memory threshold (#{rss} KB > #{mem_limit} KB)"
+              "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} and arguments #{@args} exceeds memory threshold (#{rss} KB > #{mem_limit} KB)"
             end
           @obj.callback_for_alert(alert_msg) if @obj.respond_to?(:callback_for_alert) && @obj.method(:callback_for_alert).arity == 1
           logger.warn(alert_msg)
