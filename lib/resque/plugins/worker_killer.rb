@@ -137,9 +137,9 @@ module Resque
 
           alert_msg =
             if worker_pids.present?
-              "Aggregated Memory Sum of workers exceeds memory threshold (#{agg_rss} > #{agg_mem_limit}); PIDS: #{worker_pids}\nSource of alert JOB NAME #{@obj} with arguments #{@args}"
+              "- Alert: Aggregated #{plugin_name}\n- Pid: #{worker_pids}\n- Job: #{@obj}\n- Args: #{@args}\n- Memory Limit #{rss} KB > #{mem_limit} KB"
             else
-              "#{plugin_name}: worker (pid: #{Process.pid}) with JOB NAME #{@obj} and arguments #{@args} exceeds memory threshold (#{rss} KB > #{mem_limit} KB)"
+              "- Alert: Individual #{plugin_name}\n- Pid: #{Process.pid}\n- Job: #{@obj}\n- Args: #{@args}\n- Memory Limit #{rss} KB > #{mem_limit} KB"
             end
           @obj.callback_for_alert(alert_msg) if @obj.respond_to?(:callback_for_alert) && @obj.method(:callback_for_alert).arity == 1
           logger.warn(alert_msg)
